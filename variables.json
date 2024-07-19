@@ -1,0 +1,4 @@
+{
+    "CHECK_SH": "~/airflow/dags/check.sh",
+    "MY_NAME": "hamsunwoo"
+}
