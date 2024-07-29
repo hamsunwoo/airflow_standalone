@@ -8,7 +8,11 @@ from airflow import DAG
 
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python import PythonOperator
+
+from airflow.operators.python import (
+        PythonOperator,
+        PythonVirtualenvOperator
+        )
 
 os.environ['LC_ALL'] = 'C'
 
@@ -28,7 +32,7 @@ with DAG(
 
     def get_data(ds, **kwargs):
         print(ds)
-        print(args)
+        print(kwargs)
         print("=" * 20)
         print(f"ds_nodash => {kwargs['ds_nodash']}")
         print(f"kwargs type => {type(kwargs)}")
@@ -52,12 +56,14 @@ with DAG(
 
     run_this = PythonOperator(
             task_id="print_the_context",
-            python_callable=print_context
+            python_callable=print_context 
             )
        
-    task_get_data = PythonOperator(
+    task_get_data = PythonVirtualenvOperator(
             task_id="get.data",
-            python_callable=get_data #함수이름
+            python_callable=get_data, #함수이름
+            requirements=["git+https://github.com/hamsunwoo/movie.git@0.2/api"],
+            system_site_packages=False #위에 패키지만 설치하고 다른 시스템에는 영향안주게
             )
     
     task_save_data = BashOperator(
