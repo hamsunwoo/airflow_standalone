@@ -60,25 +60,22 @@ with DAG(
         home_dir = os.path.expanduser("~")
         path = os.path.join(home_dir, f"tmp/test_parquet/load_dt/load_dt={ds_nodash}")
         if os.path.exists(path):
-            #return "rm_dir" #task_id
             return rm_dir.task_id
         else:
-            return "get.data", "echo.task"
+            return "get.start", "echo.task"
 
 
     branch_op = BranchPythonOperator(
             task_id="branch.op",
-            python_callable=branch_func,
-            trigger_rule='all_success'
+            python_callable=branch_func
             )
     
-
-    task_get_data = PythonVirtualenvOperator(
+    get_data = PythonVirtualenvOperator(
             task_id="get.data",
             python_callable=get_data, #함수이름
             requirements=["git+https://github.com/hamsunwoo/movie.git@0.3/api"],
             system_site_packages=False,
-            trigger_rule='all_done',
+            #trigger_rule='all_done',
             #venv_cache_path="tmp2/airflow_venv/get_data" #사용한 캐시경로 저장
             )
 
@@ -102,24 +99,31 @@ with DAG(
                 trigger_rule='all_success'
                 )
         
+
     task_start = EmptyOperator(task_id='start')
     task_end = EmptyOperator(task_id='end')
+
+    get_start = EmptyOperator(task_id='get.start', trigger_rule='all_done')
+    get_end = EmptyOperator(task_id='get.end')
 
     multi_y = EmptyOperator(task_id='multi.y') #다양성 영화 유무
     multi_n = EmptyOperator(task_id='multi.n')
     nation_k = EmptyOperator(task_id='nation.k') #한국외국영화
     nation_f = EmptyOperator(task_id='nation.f')
 
-    join_task = BashOperator(
-            task_id='join',
+    throw_err = BashOperator(
+            task_id='throw.err',
             bash_command="exit 1",
-            trigger_rule="all_done")
+            trigger_rule="all_done"
+            )
     
     task_start >> branch_op
-    task_start >> join_task >> save_data
+    task_start >> throw_err >> save_data
 
-    branch_op >> rm_dir >> [task_get_data, multi_y, multi_n, nation_k, nation_f]
-    branch_op >> echo_task >> save_data
-    branch_op >> [task_get_data, multi_y, multi_n, nation_k, nation_f]
+    branch_op >> rm_dir >> get_start 
+    branch_op >> get_start
+    branch_op >> echo_task
 
-    [task_get_data, multi_y, multi_n, nation_k, nation_f] >> save_data >> task_end
+    get_start >> [get_data, multi_y, multi_n, nation_k, nation_f] >> get_end
+
+    get_end >> save_data >> task_end
