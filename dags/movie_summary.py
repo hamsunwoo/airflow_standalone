@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from textwrap import dedent
 import subprocess
 import os
-from pprint import pprint
+from pprint import pprint as pp
 import pandas as pd
 
 from airflow import DAG
@@ -19,7 +19,7 @@ from airflow.operators.python import (
 os.environ['LC_ALL'] = 'C'
 
 with DAG(
-     'summery_movie',
+     'summary_movie',
     default_args={
         'depends_on_past': False,
         'retries': 1,
@@ -31,71 +31,91 @@ with DAG(
     schedule="10 2 * * *",
     start_date=datetime(2024, 7, 24),
     catchup=True,
-    tags=['summery'],
+    tags=['summary'],
 ) as dag:
-
-    def get_data(ds_nodash):
-        from  mov.api.call import save2df
-        df = save2df(ds_nodash)
-        print(df.head(5))
-   
-    def func_multi(load_dt, **kwargs):
-        from mov.api.call import save2df
-        df = save2df(load_dt=load_dt, url_param=kwargs['url_param'])
-
-        for k, v in kwargs['url_param'].items():
-            df[k] = v
-
-        p_cols = ['load_dt'] + list(kwargs['url_param'].keys())
-        df.to_parquet('~/tmp/test_parquet/load_dt', partition_cols=p_cols)
-        print(df.head(5))
-
-    def save_data(ds_nodash):
-        from mov.api.call import save2df, apply_type2df
-         
-        df = apply_type2df(load_dt=ds_nodash)
-        
-        print("*" * 33)
-        print(df.head(10))
-        print("*" * 33)
-        print(df.dtypes)
-        
-        #개봉일 기준 그룹핑 누적 관객수 합
-        print("개봉일 기준 그룹핑 누적 관객수 합")
-        g = df.groupby('openDt')
-        sum_df = g.agg({'audiCnt':'sum'}).reset_index()
-        print(sum_df)
-
-    def branch_func(ds_nodash):
-        import os
-        home_dir = os.path.expanduser("~")
-        path = os.path.join(home_dir, f"tmp/test_parquet/load_dt/load_dt={ds_nodash}")
-        if os.path.exists(path):
-            return rm_dir.task_id
-        else:
-            return "get.start", "echo.task"
-
-
-    apply_type = EmptyOperator(
-            task_id="apply.type"
-            )
     
-    merge_df = EmptyOperator(
-            task_id="merge.df"
+    REQUIREMENTS=[
+                "git+https://github.com/hamsunwoo/movie.git@0.3/api"
+                ]
+
+    def gen_empty(*ids):
+        tasks = []
+
+        for id in ids:
+            task = EmptyOperator(task_id=id)
+            tasks.append(task)
+        return tuple(tasks) #(t, )
+
+    def gen_vpython(**kw):
+        id = kw['id']
+        func_o = kw['func_obj']
+        op_kw = kw['op_kwargs']
+
+        #task = PythonVirtualenvOperator(
+        task = PythonOperator(
+        task_id=id,
+        python_callable=func_o,
+        #requirements=REQUIREMENTS,
+        #system_site_packages=False,
+        op_kwargs=op_kw
+        )
+        return task
+
+    def pro_data(**params):
+        print("@" * 33)
+        print(params['task_name'])
+        pp(params)
+        print("@" * 33)
+
+    def pro_data2(task_name, **params):
+        print("@" * 33)
+        print(task_name)
+        pp(params)
+        if "task_name" in params.keys():
+            print("========= 있음")
+        else:
+            print("========= 없음")
+        print("@" * 33)
+
+    def pro_data3(task_name):
+        print("@" * 33)
+        print(task_name)
+        print("@" * 33)
+
+    def pro_data4(task_name, ds_nodash, **kwargs):
+        print("@" * 33)
+        print(task_name)
+        print(ds_nodash)
+        print(kwargs)
+        print("@" * 33)
+
+    start, end = gen_empty('start', 'end')
+    #tasks = gen_empty('start', 'end')
+    #start = tasks[0]
+
+    apply_type = gen_vpython(
+            id = "apply.type",
+            func_obj = pro_data,
+            op_kwargs={"task_name": {"task_name": "apply_type!!!"}}
             )
 
-    de_dup = EmptyOperator(
-                task_id='de.dup'
-             )
+    merge_df = gen_vpython(
+            id = "merge.df",
+            func_obj = pro_data2,
+            op_kwargs={"task_name": {"task_name": "merge_df!!!"}}
+            )
 
-    summery_df = EmptyOperator(
-                task_id='summery.df'
-                 )
-        
+    de_dup = gen_vpython(
+            id = "de.dup",
+            func_obj = pro_data,
+            op_kwargs={"task_name": {"task_name": "de_dup!!!"}}
+            )
 
-    task_start = EmptyOperator(task_id='start')
-    task_end = EmptyOperator(task_id='end')
+    summary_df = gen_vpython(
+            id = "summary.df",
+            func_obj = pro_data2,
+            op_kwargs={"task_name": {"task_name": "summary!!!"}}
+            )
 
-    task_start >> apply_type >> merge_df
-    merge_df >> de_dup >> summery_df >> task_end
+    start >> apply_type >> merge_df >> de_dup >> summary_df >> end
 
