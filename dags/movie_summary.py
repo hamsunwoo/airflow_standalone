@@ -97,5 +97,5 @@ with DAG(
     task_end = EmptyOperator(task_id='end')
 
     task_start >> apply_type >> merge_df
-    merge_df >> de_dup >> summery_df
+    merge_df >> de_dup >> summery_df >> task_end
 
