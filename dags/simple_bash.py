@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 from textwrap import dedent
+import subprocess
+import os
 
 # The DAG object; we'll need this to instantiate a DAG
 from airflow import DAG
@@ -7,6 +9,8 @@ from airflow import DAG
 # Operators; we need this to operate!
 from airflow.operators.bash import BashOperator
 from airflow.operators.empty import EmptyOperator
+
+os.environ['LC_ALL'] = 'C'
 
 with DAG(
      'simple_bash',
@@ -56,9 +60,8 @@ with DAG(
             bash_command="""
                 echo "cut"
                 mkdir -p ~/data/cut/{{logical_date.strftime("%y%m%d")}}
-                cat ~/data/{{logical_date.strftime("%y%m%d")}}/* | cut -d';' -f2 > ~/data/cut/{{logical_date.strftime("%y%m%d")}}/cut.log
-            """,
-            trigger_rule="all_success"
+                cat ~/data/{{logical_date.strftime("%y%m%d")}}/* | cut -d' ' -f1 > ~/data/cut/{{logical_date.strftime("%y%m%d")}}/cut.log
+            """
             )
 
     task_sort = BashOperator(
